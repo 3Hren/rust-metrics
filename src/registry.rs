@@ -86,7 +86,6 @@ mod test {
         h.record(1, 1);
         r.insert("histogram", h);
 
-        let mut r = StdRegistry::new();
-
+        StdRegistry::new();
     }
 }

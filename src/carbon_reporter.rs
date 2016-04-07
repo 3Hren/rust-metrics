@@ -7,6 +7,7 @@ use reporter::Reporter;
 use counter::StdCounter;
 use gauge::StdGauge;
 use meter::MeterSnapshot;
+use std::time::Duration;
 use histogram::Histogram;
 use carbon_sender::Carbon;
 use time;
@@ -40,7 +41,7 @@ impl Reporter for CarbonReporter {
                                            Histogram(mut x) => send_histogram_metric(mnas, & mut x, & mut carbon,  prefix, ts),
                                        }
                                    }
-                                   thread::sleep_ms(delay_ms);
+                                   thread::sleep(Duration::from_millis(delay_ms as u64));
                                }
                            });
     }
@@ -144,6 +145,11 @@ fn send_histogram_metric(metric_name: String,
         ts);
 
         carbon
+        .write(prefix(format!("{}.p95", metric_name), prefix_str),
+        p95.to_string(),
+        ts);
+
+        carbon
         .write(prefix(format!("{}.p98", metric_name), prefix_str),
         p98.to_string(),
         ts);
@@ -193,10 +199,8 @@ mod test {
     use counter::{Counter, StdCounter};
     use gauge::{Gauge, StdGauge};
     use registry::{Registry, StdRegistry};
-    use reporter::Reporter;
     use carbon_reporter::CarbonReporter;
     use std::sync::Arc;
-    use std::thread;
     use histogram::*;
 
     #[test]
