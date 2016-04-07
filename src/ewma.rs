@@ -40,15 +40,33 @@ impl EWMA {
     }
 
     /// Creates a new EWMA for a n-minute moving average.
+    ///
+    /// # Panics
+    ///
+    /// Panics if rate <= 0.
     pub fn new(rate: f64) -> EWMA {
+        assert!(rate > 0.0);
+
         let i = -5.0f64 / 60.0f64 / rate;
         EWMA::from_alpha(1.0f64 - i.exp())
     }
 
-    /// Creates a new EWMA which is equivalent to the UNIX one minute load average and which expects
-    /// to be ticked every 5 seconds.
+    /// Creates a new EWMA which is equivalent to the UNIX one minute load average and which
+    /// expects to be ticked every 5 seconds.
     pub fn m01rate() -> EWMA {
         EWMA::new(1.0f64)
+    }
+
+    /// Creates a new EWMA which is equivalent to the UNIX five minute load average and which
+    /// expects to be ticked every 5 seconds.
+    pub fn m05rate() -> EWMA {
+        EWMA::new(5.0f64)
+    }
+
+    /// Creates a new EWMA which is equivalent to the UNIX fifteen minute load average and which
+    /// expects to be ticked every 5 seconds.
+    pub fn m15rate() -> EWMA {
+        EWMA::new(15.0f64)
     }
 
     pub fn rate(&self) -> f64 {

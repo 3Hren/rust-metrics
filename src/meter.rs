@@ -71,7 +71,7 @@ impl<C: Clock> StdMeter<C> {
             clock: clock,
             birthstamp: birthstamp,
             prev: AtomicI64::new(birthstamp),
-            rates: [EWMA::m01rate(), EWMA::new(5f64), EWMA::new(15f64)],
+            rates: [EWMA::m01rate(), EWMA::m05rate(), EWMA::m15rate()],
         }
     }
 
