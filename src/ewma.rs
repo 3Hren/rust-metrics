@@ -1,14 +1,16 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
+
+use syncbox::atomic::{AtomicI64, Ordering};
 
 /// An exponentially-weighted moving average.
 ///
 /// \see http://www.teamquest.com/pdfs/whitepaper/ldavg1.pdf UNIX Load Average Part 1: How It Works
 /// \see http://www.teamquest.com/pdfs/whitepaper/ldavg2.pdf UNIX Load Average Part 2
 /// \see http://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average EMA
-#[derive(Debug)]
 pub struct EWMA {
-    pub uncounted: AtomicUsize, // This tracks uncounted events
+    // This tracks uncounted events.
+    uncounted: AtomicI64,
     alpha: f64,
     interval: f64,
     rate: Mutex<f64>,
@@ -29,7 +31,7 @@ impl EWMA {
     /// Creates a new EWMA with a specific smoothing constant.
     pub fn from_alpha(alpha: f64) -> EWMA {
         EWMA {
-            uncounted: AtomicUsize::new(0),
+            uncounted: AtomicI64::new(0),
             alpha: alpha,
             interval: 5e9,
             rate: Mutex::new(0f64),
@@ -74,7 +76,7 @@ impl EWMA {
     }
 
     /// Update the moving average with a new value.
-    pub fn update(&self, value: usize) {
+    pub fn update(&self, value: i64) {
         self.uncounted.fetch_add(value, Ordering::SeqCst);
     }
 }
