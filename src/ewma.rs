@@ -1,12 +1,18 @@
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// An exponentially-weighted moving average.
+///
+/// \see http://www.teamquest.com/pdfs/whitepaper/ldavg1.pdf UNIX Load Average Part 1: How It Works
+/// \see http://www.teamquest.com/pdfs/whitepaper/ldavg2.pdf UNIX Load Average Part 2
+/// \see http://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average EMA
 #[derive(Debug)]
 pub struct EWMA {
     pub uncounted: AtomicUsize, // This tracks uncounted events
     alpha: f64,
+    interval: f64,
     rate: Mutex<f64>,
-    init: bool
+    initialized: AtomicBool,
 }
 
 pub struct EWMASnapshot {
@@ -20,45 +26,56 @@ impl EWMASnapshot {
 }
 
 impl EWMA {
-    pub fn rate(&self) -> f64 {
-        let r = self.rate.lock().unwrap();
+    /// Creates a new EWMA with a specific smoothing constant.
+    pub fn from_alpha(alpha: f64) -> EWMA {
+        EWMA {
+            uncounted: AtomicUsize::new(0),
+            alpha: alpha,
+            interval: 5e9,
+            rate: Mutex::new(0f64),
+            initialized: AtomicBool::new(false),
+         }
+    }
 
-        *r * (1e9 as f64)
+    /// Creates a new EWMA for a n-minute moving average.
+    pub fn new(rate: f64) -> EWMA {
+        let i = -5.0f64 / 60.0f64 / rate;
+        EWMA::from_alpha(1.0f64 - i.exp())
+    }
+
+    /// Creates a new EWMA which is equivalent to the UNIX one minute load average and which expects
+    /// to be ticked every 5 seconds.
+    pub fn m01rate() -> EWMA {
+        EWMA::new(1.0f64)
+    }
+
+    pub fn rate(&self) -> f64 {
+        let rate = self.rate.lock().unwrap();
+
+        *rate * (1e9 as f64)
     }
 
     pub fn snapshot(&self) -> EWMASnapshot {
         EWMASnapshot { value: self.rate() }
     }
 
-    pub fn tick(&mut self) {
-        let counter: usize = self.uncounted.load(Ordering::SeqCst);
-
-        self.uncounted.fetch_sub(counter, Ordering::SeqCst); // Broken atm
+    /// Mark the passage of time and decay the current rate accordingly.
+    pub fn tick(&self) {
+        let count = self.uncounted.swap(0, Ordering::SeqCst);
+        let instant_rate = (count as f64) / self.interval;
 
         let mut rate = self.rate.lock().unwrap();
-        let i_rate = (counter as f64) / (5e9);
 
-        if self.init {
-            *rate += self.alpha * (i_rate - *rate);
+        if self.initialized.swap(true, Ordering::Relaxed) {
+            *rate += self.alpha * (instant_rate - *rate);
         } else {
-            self.init = true;
-            *rate = i_rate;
+            *rate = instant_rate;
         }
     }
 
-    pub fn update(&self, n: usize) {
-        self.uncounted.fetch_add(n, Ordering::SeqCst);
-    }
-
-    /// construct new by alpha
-    pub fn new_by_alpha(alpha: f64) -> EWMA {
-        EWMA { uncounted: AtomicUsize::new(0), alpha: alpha, rate: Mutex::new(0f64), init: false }
-    }
-
-    /// constructs a new EWMA for a n-minute moving average.
-    pub fn new(rate: f64) -> EWMA {
-        let i: f64 = -5.0f64 / 60.0f64 / rate;
-        EWMA::new_by_alpha(1f64 - i.exp())
+    /// Update the moving average with a new value.
+    pub fn update(&self, value: usize) {
+        self.uncounted.fetch_add(value, Ordering::SeqCst);
     }
 }
 
@@ -246,5 +263,21 @@ mod test {
 
         // 15 minute
         assert_eq!(within(&mut e, 0.2207276647028646247028654470286553f64), true);
+    }
+
+    #[test]
+    fn send() {
+        fn checker<T: Send>(_ :T) {}
+
+        let ewma = EWMA::m01rate();
+        checker(ewma);
+    }
+
+    #[test]
+    fn sync() {
+        fn checker<T: Sync>(_ :T) {}
+
+        let ewma = EWMA::m01rate();
+        checker(ewma);
     }
 }
